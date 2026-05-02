@@ -23,7 +23,12 @@ interface AuthContextValue {
   openAuthDialog: (mode?: AuthMode) => void;
   closeAuthDialog: () => void;
   login: (username: string, password: string) => Promise<AuthResult>;
-  register: (username: string, password: string, confirmPassword: string) => Promise<AuthResult>;
+  register: (
+    username: string,
+    password: string,
+    confirmPassword: string,
+    turnstileToken?: string,
+  ) => Promise<AuthResult>;
   logout: () => Promise<void>;
 }
 
@@ -93,12 +98,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const register = useCallback(
-    async (username: string, password: string, confirmPassword: string): Promise<AuthResult> => {
+    async (
+      username: string,
+      password: string,
+      confirmPassword: string,
+      turnstileToken?: string,
+    ): Promise<AuthResult> => {
       try {
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, confirmPassword }),
+          body: JSON.stringify({ username, password, confirmPassword, turnstileToken }),
         });
 
         const data = (await response.json()) as { user?: AuthUser; error?: string };

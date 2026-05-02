@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { Turnstile, type TurnstileInstance } from '@marsidev/react-turnstile';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,8 +32,11 @@ export function AuthDialog() {
   const [registerUsername, setRegisterUsername] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [turnstileToken, setTurnstileToken] = useState('');
   const [message, setMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const turnstileSiteKey = process.env.NEXT_PUBLIC_TURNSTILE_SITE_KEY;
+  const turnstileRef = useRef<TurnstileInstance | null>(null);
 
   useEffect(() => {
     if (!isAuthOpen) {
@@ -40,6 +44,7 @@ export function AuthDialog() {
       setLoginPassword('');
       setRegisterPassword('');
       setConfirmPassword('');
+      setTurnstileToken('');
       setIsSubmitting(false);
     }
   }, [isAuthOpen]);
@@ -58,12 +63,19 @@ export function AuthDialog() {
   };
 
   const handleRegister = async () => {
+    if (turnstileSiteKey && !turnstileToken) {
+      setMessage('请先完成人机验证');
+      return;
+    }
+
     setIsSubmitting(true);
-    const result = await register(registerUsername, registerPassword, confirmPassword);
+    const result = await register(registerUsername, registerPassword, confirmPassword, turnstileToken);
     setIsSubmitting(false);
 
     if (!result.success) {
       setMessage(result.message || '注册失败');
+      setTurnstileToken('');
+      turnstileRef.current?.reset();
       return;
     }
 
@@ -90,6 +102,7 @@ export function AuthDialog() {
               onValueChange={(value) => {
                 openAuthDialog(value === 'register' ? 'register' : 'login');
                 setMessage(null);
+                setTurnstileToken('');
               }}
               className="mt-6"
             >
@@ -162,10 +175,27 @@ export function AuthDialog() {
                     className="h-11 rounded-xl border-white/10 bg-white/8 text-white placeholder:text-slate-400"
                   />
                 </div>
+                {turnstileSiteKey ? (
+                  <div className="overflow-hidden rounded-xl border border-white/10 bg-white/5 p-2">
+                    <Turnstile
+                      ref={turnstileRef}
+                      siteKey={turnstileSiteKey}
+                      onSuccess={(token) => {
+                        setTurnstileToken(token);
+                      }}
+                      onExpire={() => {
+                        setTurnstileToken('');
+                      }}
+                      onError={() => {
+                        setTurnstileToken('');
+                      }}
+                    />
+                  </div>
+                ) : null}
                 <AuthFormHint message={message} />
                 <Button
                   onClick={handleRegister}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || (Boolean(turnstileSiteKey) && !turnstileToken)}
                   className="h-11 w-full rounded-xl bg-fuchsia-500 text-white hover:bg-fuchsia-400"
                 >
                   {isSubmitting ? '提交中...' : '注册并登录'}

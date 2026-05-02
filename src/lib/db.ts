@@ -1,4 +1,4 @@
-import { Pool, type QueryResultRow } from 'pg';
+import { Pool, type PoolClient, type QueryResultRow } from 'pg';
 
 declare global {
   var __dreamboyDbPool: Pool | undefined;
@@ -32,4 +32,14 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   params: unknown[] = [],
 ) {
   return getDb().query<T>(text, params);
+}
+
+export async function withDbClient<T>(callback: (client: PoolClient) => Promise<T>) {
+  const client = await getDb().connect();
+
+  try {
+    return await callback(client);
+  } finally {
+    client.release();
+  }
 }

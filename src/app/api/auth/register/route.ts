@@ -7,17 +7,37 @@ import {
   sanitizeUser,
 } from '@/lib/auth';
 import { ensureDatabaseInitialized } from '@/lib/db-init';
+import {
+  isTurnstileConfigured,
+  isTurnstileEnabled,
+  verifyTurnstileToken,
+} from '@/lib/turnstile';
 
 export const runtime = 'nodejs';
+
+function getRequestIp(request: NextRequest) {
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp) {
+    return cfIp;
+  }
+
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    return forwardedFor.split(',')[0]?.trim();
+  }
+
+  return undefined;
+}
 
 export async function POST(request: NextRequest) {
   try {
     await ensureDatabaseInitialized();
 
-    const { username, password, confirmPassword } = await request.json();
+    const { username, password, confirmPassword, turnstileToken } = await request.json();
     const normalizedUsername = typeof username === 'string' ? username.trim() : '';
     const normalizedPassword = typeof password === 'string' ? password : '';
     const normalizedConfirmPassword = typeof confirmPassword === 'string' ? confirmPassword : '';
+    const normalizedTurnstileToken = typeof turnstileToken === 'string' ? turnstileToken.trim() : '';
 
     if (!normalizedUsername) {
       return NextResponse.json({ error: '请输入用户名' }, { status: 400 });
@@ -39,6 +59,25 @@ export async function POST(request: NextRequest) {
 
     if (existedUser) {
       return NextResponse.json({ error: '用户名已存在，请直接登录' }, { status: 409 });
+    }
+
+    if (isTurnstileEnabled()) {
+      if (!isTurnstileConfigured()) {
+        return NextResponse.json({ error: '人机验证配置不完整，请稍后再试' }, { status: 500 });
+      }
+
+      if (!normalizedTurnstileToken) {
+        return NextResponse.json({ error: '请先完成人机验证' }, { status: 400 });
+      }
+
+      const verificationResult = await verifyTurnstileToken(
+        normalizedTurnstileToken,
+        getRequestIp(request),
+      );
+
+      if (!verificationResult.success) {
+        return NextResponse.json({ error: '人机验证失败，请重试' }, { status: 400 });
+      }
     }
 
     const user = await createUser(normalizedUsername, normalizedPassword);

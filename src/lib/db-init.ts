@@ -81,6 +81,16 @@ create table if not exists message_assets (
 );
 
 create index if not exists message_assets_message_id_idx on message_assets (message_id);
+
+create table if not exists rate_limit_events (
+  id bigserial primary key,
+  scope text not null,
+  actor_key text not null,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists rate_limit_events_scope_actor_created_idx
+on rate_limit_events (scope, actor_key, created_at desc);
 `;
 
 const compatibilitySql = `
@@ -136,6 +146,16 @@ where id in (
 
 create unique index if not exists chat_threads_user_character_key
 on chat_threads (user_id, character_id);
+
+update chat_messages
+set
+  audio_url = null,
+  msg_type = case
+    when msg_type = 'mixed' then 'image'
+    when msg_type = 'voice' then 'text'
+    else msg_type
+  end
+where audio_url like 'data:audio/%';
 `;
 
 async function seedCharacters() {
@@ -157,15 +177,20 @@ async function seedCharacters() {
         )
         values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8, $9, $10, 'active')
         on conflict (id) do update set
-          name = excluded.name,
-          type_tag = excluded.type_tag,
-          description = excluded.description,
-          system_prompt = excluded.system_prompt,
-          tagline = excluded.tagline,
-          tags = excluded.tags,
-          avatar_url = excluded.avatar_url,
-          speaker = excluded.speaker,
-          appearance = excluded.appearance,
+          name = case when coalesce(characters.name, '') = '' then excluded.name else characters.name end,
+          type_tag = case when coalesce(characters.type_tag, '') = '' then excluded.type_tag else characters.type_tag end,
+          description = case when coalesce(characters.description, '') = '' then excluded.description else characters.description end,
+          system_prompt = case when coalesce(characters.system_prompt, '') = '' then excluded.system_prompt else characters.system_prompt end,
+          tagline = case when coalesce(characters.tagline, '') = '' then excluded.tagline else characters.tagline end,
+          tags = case when coalesce(characters.tags::text, '[]') = '[]' then excluded.tags else characters.tags end,
+          avatar_url = case when coalesce(characters.avatar_url, '') = '' then excluded.avatar_url else characters.avatar_url end,
+          speaker = case
+            when coalesce(characters.speaker, '') = ''
+              or characters.speaker like '%uranus_bigtts'
+            then excluded.speaker
+            else characters.speaker
+          end,
+          appearance = case when coalesce(characters.appearance, '') = '' then excluded.appearance else characters.appearance end,
           updated_at = now()
       `,
       [

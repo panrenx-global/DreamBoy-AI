@@ -1,10 +1,10 @@
-import path from 'path';
-import type { NextConfig } from 'next';
+import path from 'node:path';
 
-const nextConfig: NextConfig = {
+/** @type {import('next').NextConfig} */
+const nextConfig = {
   allowedDevOrigins: ['*.dev.coze.site'],
   turbopack: {
-    root: path.resolve(__dirname),
+    root: path.resolve(process.cwd()),
   },
   images: {
     remotePatterns: [

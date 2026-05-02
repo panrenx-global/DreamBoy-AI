@@ -22,7 +22,7 @@ load_env_file "${COZE_WORKSPACE_PATH}/.env"
 load_env_file "${COZE_WORKSPACE_PATH}/.env.local"
 
 echo "Installing dependencies..."
-pnpm install --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only
+pnpm install --prod=false --prefer-frozen-lockfile --prefer-offline --loglevel debug --reporter=append-only
 
 echo "Building the Next.js project..."
 pnpm next build

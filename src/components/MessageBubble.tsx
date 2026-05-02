@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Message, CharacterId } from '@/types/chat';
 import { VoicePlayer } from './VoicePlayer';
 import { ImageViewer } from './ImageViewer';
-import { Loader2 } from 'lucide-react';
+import { Check, Copy, ExternalLink, Loader2 } from 'lucide-react';
 
 interface MessageBubbleProps {
   message: Message;
@@ -30,10 +30,21 @@ export function MessageBubble({
   isGeneratingImage 
 }: MessageBubbleProps) {
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const isUser = message.role === 'user';
 
   // 获取角色主题色
   const gradientClass = characterId ? avatarColors[characterId] : 'from-pink-200 to-rose-300';
+
+  async function handleCopyImageLink() {
+    if (!message.imageUri) {
+      return;
+    }
+
+    await navigator.clipboard.writeText(message.imageUri);
+    setLinkCopied(true);
+    window.setTimeout(() => setLinkCopied(false), 1800);
+  }
 
   return (
     <>
@@ -83,23 +94,57 @@ export function MessageBubble({
 
           {/* 图片消息 - 统一圆角风格 */}
           {message.type === 'image' && (
-            <div
-              className={`rounded-2xl overflow-hidden shadow-sm cursor-pointer transition-transform hover:scale-[1.02] ${
-                !isUser ? 'rounded-tl-sm' : 'rounded-tr-sm'
-              }`}
-              onClick={() => setImageViewerOpen(true)}
-            >
-              {isGeneratingImage || !message.imageUri ? (
-                <div className="w-48 h-48 bg-gray-100 flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+            <div className="flex flex-col gap-2">
+              <div
+                className={`rounded-2xl overflow-hidden shadow-sm cursor-pointer transition-transform hover:scale-[1.02] ${
+                  !isUser ? 'rounded-tl-sm' : 'rounded-tr-sm'
+                }`}
+                onClick={() => setImageViewerOpen(true)}
+              >
+                {isGeneratingImage || !message.imageUri ? (
+                  <div className="w-48 h-48 bg-gray-100 flex items-center justify-center">
+                    <Loader2 className="w-8 h-8 text-gray-400 animate-spin" />
+                  </div>
+                ) : (
+                  <img
+                    src={message.imageUri}
+                    alt="发送的图片"
+                    className="w-48 h-48 object-cover rounded-2xl"
+                  />
+                )}
+              </div>
+
+              {message.imageUri ? (
+                <div className={`w-48 rounded-2xl px-3 py-2 text-xs shadow-sm ${
+                  isUser ? 'bg-blue-50 text-blue-700' : 'bg-white text-gray-600'
+                }`}>
+                  <div className="flex items-center gap-3">
+                    <a
+                      href={message.imageUri}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-medium hover:underline"
+                    >
+                      <ExternalLink className="h-3.5 w-3.5" />
+                      打开原图
+                    </a>
+                    <button
+                      type="button"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        void handleCopyImageLink();
+                      }}
+                      className="inline-flex items-center gap-1 font-medium hover:underline"
+                    >
+                      {linkCopied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+                      {linkCopied ? '已复制' : '复制链接'}
+                    </button>
+                  </div>
+                  <p className="mt-2 truncate font-mono text-[11px]" title={message.imageUri}>
+                    {message.imageUri}
+                  </p>
                 </div>
-              ) : (
-                <img
-                  src={message.imageUri}
-                  alt="发送的图片"
-                  className="w-48 h-48 object-cover rounded-2xl"
-                />
-              )}
+              ) : null}
             </div>
           )}
         </div>

@@ -99,6 +99,7 @@ export interface ImageRequest {
 
 export interface ImageResponse {
   imageUri: string;
+  imageUrl?: string;
   message?: ChatMessagePayload;
   error?: string;
 }

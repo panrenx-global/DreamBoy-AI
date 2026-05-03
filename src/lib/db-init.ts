@@ -214,9 +214,20 @@ async function seedCharacters() {
   }
 }
 
+async function runSqlStatements(sql: string) {
+  const statements = sql
+    .split(/;\s*\n/g)
+    .map((statement) => statement.trim())
+    .filter(Boolean);
+
+  for (const statement of statements) {
+    await query(`${statement};`);
+  }
+}
+
 async function runInit() {
-  await query(schemaSql);
-  await query(compatibilitySql);
+  await runSqlStatements(schemaSql);
+  await runSqlStatements(compatibilitySql);
   await seedCharacters();
 }
 

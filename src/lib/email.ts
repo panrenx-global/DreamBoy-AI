@@ -1,17 +1,11 @@
 import { Resend } from 'resend'
 
+const resend = new Resend(process.env.RESEND_API_KEY)
+
 export async function sendWelcomeEmail(
   userEmail: string,
   userName: string
 ) {
-  const apiKey = process.env.RESEND_API_KEY
-
-  if (!apiKey) {
-    throw new Error('RESEND_API_KEY is not configured')
-  }
-
-  const resend = new Resend(apiKey)
-
   await resend.emails.send({
     from: '纸片人男友 <onboarding@resend.dev>',
     to: userEmail,

@@ -6,6 +6,8 @@
     "build": "bash ./scripts/build.sh",
     "db:init": "pnpm tsx scripts/init-db.ts",
     "dev": "bash ./scripts/dev.sh",
+    "daily-love-letters": "pnpm tsx scripts/send-daily-love-letters.ts",
+    "email-status": "pnpm tsx scripts/get-email-status.ts",
     "preinstall": "npx only-allow pnpm",
     "lint": "eslint",
     "start": "bash ./scripts/start.sh",

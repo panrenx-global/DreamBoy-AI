@@ -2,6 +2,7 @@ import { createServer } from 'http';
 import { parse } from 'url';
 import next from 'next';
 import { ensureDatabaseInitialized } from './lib/db-init';
+import { startDailyLoveLetterScheduler } from './lib/daily-love-letter-scheduler';
 
 const dev = process.env.COZE_PROJECT_ENV !== 'PROD';
 const hostname = process.env.HOSTNAME || 'localhost';
@@ -13,6 +14,7 @@ const handle = app.getRequestHandler();
 
 Promise.resolve()
   .then(() => ensureDatabaseInitialized())
+  .then(() => startDailyLoveLetterScheduler())
   .then(() => app.prepare())
   .then(() => {
   const server = createServer(async (req, res) => {

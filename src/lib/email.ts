@@ -5,8 +5,7 @@ import { WelcomeEmail } from '@/emails/welcome';
 import { query } from '@/lib/db';
 import { ensureDatabaseInitialized } from '@/lib/db-init';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const defaultFromAddress = '纸片人男友 <onboarding@resend.dev>';
+const defaultFromAddress = 'AI-Boyfriend-Test <onboarding@resend.dev>';
 
 type ArkChatResponse = {
   choices?: Array<{
@@ -17,7 +16,43 @@ type ArkChatResponse = {
 };
 
 function getMailFromAddress() {
-  return process.env.RESEND_FROM_EMAIL || defaultFromAddress;
+  const rawFromAddress = process.env.RESEND_FROM_EMAIL || defaultFromAddress;
+  const matchedAddress = rawFromAddress.match(/<([^>]+)>/);
+  const emailAddress = matchedAddress?.[1] || rawFromAddress.trim();
+
+  return `AI-Boyfriend-Test <${emailAddress}>`;
+}
+
+function getEmailRecipient(userEmail: string) {
+  return process.env.EMAIL_TEST_RECIPIENT?.trim() || userEmail;
+}
+
+function getRandomSubjectTag() {
+  return Math.floor(100 + Math.random() * 900).toString();
+}
+
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY || '';
+
+  if (!apiKey) {
+    throw new Error('RESEND_API_KEY is not configured');
+  }
+
+  return new Resend(apiKey);
+}
+
+async function sendEmailOrThrow(
+  payload: Parameters<ReturnType<typeof getResendClient>['emails']['send']>[0],
+) {
+  const result = await getResendClient().emails.send(payload);
+
+  if (result.error || !result.data?.id) {
+    throw new Error(
+      result.error?.message || 'Resend accepted no email id for this request',
+    );
+  }
+
+  return result.data.id;
 }
 
 function getAppBaseUrl() {
@@ -83,15 +118,17 @@ async function generateLoveLetter(userName: string) {
 }
 
 export async function sendWelcomeEmail(userEmail: string, userName: string) {
-  await resend.emails.send({
+  const subjectTag = getRandomSubjectTag();
+  const emailId = await sendEmailOrThrow({
     from: getMailFromAddress(),
-    to: userEmail,
-    subject: '你好呀，我是你的专属男友 💌',
+    to: getEmailRecipient(userEmail),
+    subject: `你好呀 [${subjectTag}]，我是你的专属男友 💌`,
     react: WelcomeEmail({
       userName,
       appUrl: getAppBaseUrl(),
     }),
   });
+  console.log(`[email] welcome sent`, { userEmail, recipient: getEmailRecipient(userEmail), emailId });
 }
 
 export async function sendDailyLoveLetter(userEmail: string, userName: string) {
@@ -105,31 +142,113 @@ export async function sendDailyLoveLetter(userEmail: string, userName: string) {
 
   const safeLoveLetter =
     loveLetter || `早安，${userName}。新的一天已经开始了，愿你今天也被温柔对待。忙完了就回来找我，我一直都在想你。`;
+  const subjectTag = getRandomSubjectTag();
 
-  await resend.emails.send({
+  const emailId = await sendEmailOrThrow({
     from: getMailFromAddress(),
-    to: userEmail,
-    subject: `早安 ${userName}，今天也想你了`,
+    to: getEmailRecipient(userEmail),
+    subject: `早安 [${subjectTag}] ${userName}，今天也想你了`,
     react: DailyLoveLetterEmail({
       userName,
       loveLetter: safeLoveLetter,
       appUrl: getAppBaseUrl(),
     }),
   });
+  console.log(`[email] daily_love_letter sent`, {
+    userEmail,
+    recipient: getEmailRecipient(userEmail),
+    userName,
+    emailId,
+  });
 }
 
 type DailyLoveLetterUserRow = {
+  id: number;
   email: string | null;
   username: string;
   nickname: string | null;
 };
 
-export async function sendDailyLoveLetterToAll() {
+function getDateStringInTimeZone(date: Date, timeZone: string) {
+  const formatter = new Intl.DateTimeFormat('en-CA', {
+    timeZone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  });
+
+  return formatter.format(date);
+}
+
+async function claimScheduledEmailDelivery(userId: number, deliveryDate: string) {
+  const result = await query<{ id: number }>(
+    `
+      insert into scheduled_email_deliveries (
+        user_id,
+        email_type,
+        delivery_date,
+        status,
+        error_message,
+        sent_at,
+        updated_at
+      )
+      values ($1, 'daily_love_letter', $2::date, 'processing', null, null, now())
+      on conflict (user_id, email_type, delivery_date)
+      do update set
+        status = 'processing',
+        error_message = null,
+        sent_at = null,
+        updated_at = now()
+      where scheduled_email_deliveries.status = 'failed'
+        or (
+          scheduled_email_deliveries.status = 'processing'
+          and scheduled_email_deliveries.updated_at < now() - interval '30 minutes'
+        )
+      returning id
+    `,
+    [userId, deliveryDate],
+  );
+
+  return result.rows[0]?.id ?? null;
+}
+
+async function markScheduledEmailDeliverySent(deliveryId: number) {
+  await query(
+    `
+      update scheduled_email_deliveries
+      set status = 'sent', sent_at = now(), updated_at = now(), error_message = null
+      where id = $1
+    `,
+    [deliveryId],
+  );
+}
+
+async function markScheduledEmailDeliveryFailed(deliveryId: number, error: unknown) {
+  const errorMessage = error instanceof Error ? error.message : String(error);
+
+  await query(
+    `
+      update scheduled_email_deliveries
+      set status = 'failed', error_message = $2, updated_at = now()
+      where id = $1
+    `,
+    [deliveryId, errorMessage.slice(0, 1000)],
+  );
+}
+
+export async function sendDailyLoveLetterToAll(options?: {
+  deliveryDate?: string;
+  timeZone?: string;
+  force?: boolean;
+}) {
   await ensureDatabaseInitialized();
+  const timeZone = options?.timeZone || process.env.DAILY_LOVE_LETTER_TIMEZONE || 'Asia/Shanghai';
+  const deliveryDate = options?.deliveryDate || getDateStringInTimeZone(new Date(), timeZone);
+  const force = options?.force === true;
 
   const result = await query<DailyLoveLetterUserRow>(
     `
-      select email, username, nickname
+      select id, email, username, nickname
       from users
       where status = 'active'
     `,
@@ -138,6 +257,7 @@ export async function sendDailyLoveLetterToAll() {
   let sent = 0;
   let failed = 0;
   let skipped = 0;
+  let duplicates = 0;
 
   for (const user of result.rows) {
     const userEmail = user.email?.trim();
@@ -148,19 +268,36 @@ export async function sendDailyLoveLetterToAll() {
       continue;
     }
 
+    const deliveryId = force ? null : await claimScheduledEmailDelivery(user.id, deliveryDate);
+
+    if (!force && !deliveryId) {
+      duplicates += 1;
+      continue;
+    }
+
     try {
       await sendDailyLoveLetter(userEmail, userName);
+      if (deliveryId) {
+        await markScheduledEmailDeliverySent(deliveryId);
+      }
       sent += 1;
     } catch (error) {
+      if (deliveryId) {
+        await markScheduledEmailDeliveryFailed(deliveryId, error);
+      }
       failed += 1;
       console.error(`给 ${userEmail} 发情话失败：`, error);
     }
   }
 
   return {
+    deliveryDate,
+    force,
+    timeZone,
     total: result.rows.length,
     sent,
     failed,
     skipped,
+    duplicates,
   };
 }

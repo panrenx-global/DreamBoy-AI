@@ -96,6 +96,24 @@ create table if not exists rate_limit_events (
 
 create index if not exists rate_limit_events_scope_actor_created_idx
 on rate_limit_events (scope, actor_key, created_at desc);
+
+create table if not exists scheduled_email_deliveries (
+  id bigserial primary key,
+  user_id integer not null references users(id) on delete cascade,
+  email_type varchar(50) not null,
+  delivery_date date not null,
+  status varchar(20) not null default 'processing',
+  error_message text,
+  sent_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create unique index if not exists scheduled_email_deliveries_user_type_date_key
+on scheduled_email_deliveries (user_id, email_type, delivery_date);
+
+create index if not exists scheduled_email_deliveries_date_idx
+on scheduled_email_deliveries (delivery_date, email_type, status);
 `;
 
 const compatibilitySql = `

@@ -25,6 +25,7 @@ interface AuthContextValue {
   login: (username: string, password: string) => Promise<AuthResult>;
   register: (
     username: string,
+    email: string,
     password: string,
     confirmPassword: string,
     turnstileToken?: string,
@@ -100,6 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const register = useCallback(
     async (
       username: string,
+      email: string,
       password: string,
       confirmPassword: string,
       turnstileToken?: string,
@@ -108,7 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const response = await fetch('/api/auth/register', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password, confirmPassword, turnstileToken }),
+          body: JSON.stringify({ username, email, password, confirmPassword, turnstileToken }),
         });
 
         const data = (await response.json()) as { user?: AuthUser; error?: string };

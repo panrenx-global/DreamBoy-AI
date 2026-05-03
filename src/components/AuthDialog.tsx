@@ -30,6 +30,7 @@ export function AuthDialog() {
   const [loginUsername, setLoginUsername] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [registerUsername, setRegisterUsername] = useState('');
+  const [registerEmail, setRegisterEmail] = useState('');
   const [registerPassword, setRegisterPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [turnstileToken, setTurnstileToken] = useState('');
@@ -43,6 +44,7 @@ export function AuthDialog() {
       setMessage(null);
       setLoginPassword('');
       setRegisterPassword('');
+      setRegisterEmail('');
       setConfirmPassword('');
       setTurnstileToken('');
       setIsSubmitting(false);
@@ -69,7 +71,13 @@ export function AuthDialog() {
     }
 
     setIsSubmitting(true);
-    const result = await register(registerUsername, registerPassword, confirmPassword, turnstileToken);
+    const result = await register(
+      registerUsername,
+      registerEmail,
+      registerPassword,
+      confirmPassword,
+      turnstileToken,
+    );
     setIsSubmitting(false);
 
     if (!result.success) {
@@ -152,6 +160,16 @@ export function AuthDialog() {
                     value={registerUsername}
                     onChange={(e) => setRegisterUsername(e.target.value)}
                     placeholder="请设置用户名"
+                    className="h-11 rounded-xl border-white/10 bg-white/8 text-white placeholder:text-slate-400"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-sm text-slate-200">邮箱</label>
+                  <Input
+                    type="email"
+                    value={registerEmail}
+                    onChange={(e) => setRegisterEmail(e.target.value)}
+                    placeholder="请输入常用邮箱"
                     className="h-11 rounded-xl border-white/10 bg-white/8 text-white placeholder:text-slate-400"
                   />
                 </div>

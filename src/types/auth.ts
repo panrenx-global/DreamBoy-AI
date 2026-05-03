@@ -1,6 +1,7 @@
 export interface AuthUser {
   id: number;
   username: string;
+  email: string | null;
 }
 
 export interface StoredAuthUser extends AuthUser {

@@ -18,11 +18,13 @@ interface UserRow {
   id: number;
   username: string;
   password_hash: string;
+  email: string | null;
 }
 
 export interface SessionUser {
   id: number;
   username: string;
+  email: string | null;
 }
 
 export async function hashPassword(password: string) {
@@ -56,10 +58,14 @@ function normalizeUsername(username: string) {
   return username.trim();
 }
 
+function normalizeEmail(email: string) {
+  return email.trim().toLowerCase();
+}
+
 export async function findUserByUsername(username: string) {
   const result = await query<UserRow>(
     `
-      select id, username, password_hash
+      select id, username, password_hash, email
       from users
       where username = $1 and status = 'active'
       limit 1
@@ -70,16 +76,30 @@ export async function findUserByUsername(username: string) {
   return result.rows[0] || null;
 }
 
-export async function createUser(username: string, password: string) {
+export async function findUserByEmail(email: string) {
+  const result = await query<UserRow>(
+    `
+      select id, username, password_hash, email
+      from users
+      where lower(email) = $1 and status = 'active'
+      limit 1
+    `,
+    [normalizeEmail(email)],
+  );
+
+  return result.rows[0] || null;
+}
+
+export async function createUser(username: string, password: string, email: string) {
   const passwordHash = await hashPassword(password);
 
   const result = await query<UserRow>(
     `
-      insert into users (username, password_hash, nickname, status)
-      values ($1, $2, $1, 'active')
-      returning id, username, password_hash
+      insert into users (username, password_hash, email, nickname, status)
+      values ($1, $2, $3, $1, 'active')
+      returning id, username, password_hash, email
     `,
-    [normalizeUsername(username), passwordHash],
+    [normalizeUsername(username), passwordHash, normalizeEmail(email)],
   );
 
   return result.rows[0];
@@ -139,10 +159,11 @@ export async function getSessionUserFromRequest(request: NextRequest): Promise<S
   const result = await query<{
     id: number;
     username: string;
+    email: string | null;
     expires_at: Date;
   }>(
     `
-      select u.id, u.username, s.expires_at
+      select u.id, u.username, u.email, s.expires_at
       from user_sessions s
       join users u on u.id = s.user_id
       where s.token_hash = $1 and u.status = 'active'
@@ -165,12 +186,14 @@ export async function getSessionUserFromRequest(request: NextRequest): Promise<S
   return {
     id: row.id,
     username: row.username,
+    email: row.email,
   };
 }
 
-export function sanitizeUser(user: { id: number; username: string }) {
+export function sanitizeUser(user: { id: number; username: string; email?: string | null }) {
   return {
     id: user.id,
     username: user.username,
+    email: user.email ?? null,
   };
 }

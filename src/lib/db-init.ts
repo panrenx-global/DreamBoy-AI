@@ -16,8 +16,13 @@ create table if not exists users (
 
 create unique index if not exists users_username_key on users (username);
 
+alter table users add column if not exists email varchar(255);
 alter table users add column if not exists status varchar(20) not null default 'active';
 alter table users add column if not exists updated_at timestamptz not null default now();
+
+create unique index if not exists users_email_key
+on users (lower(email))
+where email is not null;
 
 create table if not exists user_sessions (
   id uuid primary key,

@@ -1,9 +1,22 @@
 import type { Metadata } from 'next';
 import './globals.css';
+import { siteConfig } from '@/lib/site';
 
 export const metadata: Metadata = {
-  title: '纸片人男友 - AI 虚拟恋爱聊天',
-  description: '选择一个专属的虚拟男友，开启甜蜜聊天体验',
+  metadataBase: new URL(siteConfig.url),
+  title: `${siteConfig.name} - AI 虚拟恋爱聊天`,
+  description: siteConfig.description,
+  alternates: {
+    canonical: '/',
+  },
+  openGraph: {
+    title: `${siteConfig.name} - AI 虚拟恋爱聊天`,
+    description: siteConfig.description,
+    url: siteConfig.url,
+    siteName: siteConfig.name,
+    locale: 'zh_CN',
+    type: 'website',
+  },
 };
 
 export default function RootLayout({

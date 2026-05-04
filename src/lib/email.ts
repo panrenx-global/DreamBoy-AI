@@ -5,7 +5,9 @@ import { WelcomeEmail } from '@/emails/welcome';
 import { query } from '@/lib/db';
 import { ensureDatabaseInitialized } from '@/lib/db-init';
 
-const defaultFromAddress = 'AI-Boyfriend-Test <onboarding@resend.dev>';
+const defaultFromAddress = '纸片人男友 <noreply@ai.prx2025.xyz>';
+const defaultAppBaseUrl = 'https://ai.prx2025.xyz';
+const defaultFromName = '纸片人男友';
 
 type ArkChatResponse = {
   choices?: Array<{
@@ -17,14 +19,33 @@ type ArkChatResponse = {
 
 function getMailFromAddress() {
   const rawFromAddress = process.env.RESEND_FROM_EMAIL || defaultFromAddress;
+  const matchedName = rawFromAddress.match(/^\s*([^<]+?)\s*</);
   const matchedAddress = rawFromAddress.match(/<([^>]+)>/);
   const emailAddress = matchedAddress?.[1] || rawFromAddress.trim();
+  const displayName = matchedName?.[1]?.trim() || defaultFromName;
 
-  return `AI-Boyfriend-Test <${emailAddress}>`;
+  if (process.env.NODE_ENV === 'production' && emailAddress.endsWith('@resend.dev')) {
+    throw new Error('RESEND_FROM_EMAIL must use a verified sender on ai.prx2025.xyz in production');
+  }
+
+  return `${displayName} <${emailAddress}>`;
 }
 
 function getEmailRecipient(userEmail: string) {
-  return process.env.EMAIL_TEST_RECIPIENT?.trim() || userEmail;
+  const testRecipient = process.env.EMAIL_TEST_RECIPIENT?.trim();
+
+  if (!testRecipient) {
+    return userEmail;
+  }
+
+  if (process.env.NODE_ENV === 'production') {
+    console.warn(
+      '[email] EMAIL_TEST_RECIPIENT is configured but will be ignored in production so real users can receive emails',
+    );
+    return userEmail;
+  }
+
+  return testRecipient;
 }
 
 function getRandomSubjectTag() {
@@ -56,7 +77,7 @@ async function sendEmailOrThrow(
 }
 
 function getAppBaseUrl() {
-  return (process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000').replace(
+  return (process.env.APP_BASE_URL || process.env.NEXT_PUBLIC_APP_URL || defaultAppBaseUrl).replace(
     /\/+$/,
     '',
   );

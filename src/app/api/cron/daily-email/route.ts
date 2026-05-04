@@ -41,13 +41,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await sendDailyLoveLetterToAll();
+    const summary = await sendDailyLoveLetterToAll();
+
+    console.log('[cron/daily-email] run finished', {
+      authSource,
+      ...summary,
+    });
+
+    if (summary.failed > 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: '每日情话发送存在失败记录',
+          authSource,
+          time: new Date().toISOString(),
+          summary,
+        },
+        { status: 500 },
+      );
+    }
 
     return NextResponse.json({
       success: true,
       message: '每日情话发送完成',
       authSource,
       time: new Date().toISOString(),
+      summary,
     });
   } catch (error) {
     console.error('每日情话发送失败：', error);

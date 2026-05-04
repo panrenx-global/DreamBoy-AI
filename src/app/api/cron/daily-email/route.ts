@@ -45,17 +45,25 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    console.log('[cron/daily-email] request accepted', {
+      authSource,
+      force,
+      targetEmail: targetEmail || null,
+      userAgent: request.headers.get('user-agent') || 'unknown',
+    });
+
     const summary = await sendDailyLoveLetterToAll({
       force,
       targetEmail,
     });
 
-    console.log('[cron/daily-email] run finished', {
+    const logPayload = {
       authSource,
       ...summary,
-    });
+    };
 
     if (summary.failed > 0) {
+      console.error('[cron/daily-email] run finished with failures', logPayload);
       return NextResponse.json(
         {
           success: false,
@@ -66,6 +74,12 @@ export async function GET(request: NextRequest) {
         },
         { status: 500 },
       );
+    }
+
+    if (summary.sent === 0) {
+      console.warn('[cron/daily-email] run finished without sending any emails', logPayload);
+    } else {
+      console.log('[cron/daily-email] run finished', logPayload);
     }
 
     return NextResponse.json({

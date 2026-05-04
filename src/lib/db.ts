@@ -4,12 +4,34 @@ declare global {
   var __dreamboyDbPool: Pool | undefined;
 }
 
-function createPool() {
-  const connectionString = process.env.DATABASE_URL;
+function normalizeConnectionString(connectionString: string) {
+  try {
+    const url = new URL(connectionString);
+    const sslMode = url.searchParams.get('sslmode');
+    const hasLibpqCompat = url.searchParams.has('uselibpqcompat');
 
-  if (!connectionString) {
+    if (
+      !hasLibpqCompat &&
+      (sslMode === 'prefer' || sslMode === 'require' || sslMode === 'verify-ca')
+    ) {
+      url.searchParams.set('uselibpqcompat', 'true');
+      return url.toString();
+    }
+  } catch {
+    // Fall back to the raw connection string if URL parsing fails.
+  }
+
+  return connectionString;
+}
+
+function createPool() {
+  const rawConnectionString = process.env.DATABASE_URL;
+
+  if (!rawConnectionString) {
     throw new Error('DATABASE_URL is not configured');
   }
+
+  const connectionString = normalizeConnectionString(rawConnectionString);
 
   return new Pool({
     connectionString,

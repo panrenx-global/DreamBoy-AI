@@ -9,6 +9,10 @@ const defaultFromAddress = '纸片人男友 <noreply@ai.prx2025.xyz>';
 const defaultAppBaseUrl = 'https://ai.prx2025.xyz';
 const defaultFromName = '纸片人男友';
 
+declare global {
+  var __dreamboyEmailTestRecipientWarned: boolean | undefined;
+}
+
 type ArkChatResponse = {
   choices?: Array<{
     message?: {
@@ -39,9 +43,12 @@ function getEmailRecipient(userEmail: string) {
   }
 
   if (process.env.NODE_ENV === 'production') {
-    console.warn(
-      '[email] EMAIL_TEST_RECIPIENT is configured but will be ignored in production so real users can receive emails',
-    );
+    if (!globalThis.__dreamboyEmailTestRecipientWarned) {
+      globalThis.__dreamboyEmailTestRecipientWarned = true;
+      console.warn(
+        '[email] EMAIL_TEST_RECIPIENT is configured but will be ignored in production so real users can receive emails',
+      );
+    }
     return userEmail;
   }
 

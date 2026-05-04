@@ -3,6 +3,10 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
+  const forceParam = request.nextUrl.searchParams.get('force');
+  const force =
+    forceParam === 'true' || forceParam === '1' || forceParam === 'yes';
+  const targetEmail = request.nextUrl.searchParams.get('email')?.trim().toLowerCase() || undefined;
 
   if (!cronSecret) {
     console.error('[cron/daily-email] CRON_SECRET is not configured');
@@ -41,7 +45,10 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const summary = await sendDailyLoveLetterToAll();
+    const summary = await sendDailyLoveLetterToAll({
+      force,
+      targetEmail,
+    });
 
     console.log('[cron/daily-email] run finished', {
       authSource,

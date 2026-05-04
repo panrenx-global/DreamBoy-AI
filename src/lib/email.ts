@@ -261,18 +261,22 @@ export async function sendDailyLoveLetterToAll(options?: {
   deliveryDate?: string;
   timeZone?: string;
   force?: boolean;
+  targetEmail?: string;
 }) {
   await ensureDatabaseInitialized();
   const timeZone = options?.timeZone || process.env.DAILY_LOVE_LETTER_TIMEZONE || 'Asia/Shanghai';
   const deliveryDate = options?.deliveryDate || getDateStringInTimeZone(new Date(), timeZone);
   const force = options?.force === true;
+  const targetEmail = options?.targetEmail?.trim().toLowerCase() || null;
 
   const result = await query<DailyLoveLetterUserRow>(
     `
       select id, email, username, nickname
       from users
       where status = 'active'
+        and ($1::text is null or lower(email) = $1)
     `,
+    [targetEmail],
   );
 
   let sent = 0;
@@ -314,6 +318,7 @@ export async function sendDailyLoveLetterToAll(options?: {
   return {
     deliveryDate,
     force,
+    targetEmail,
     timeZone,
     total: result.rows.length,
     sent,

@@ -8,6 +8,8 @@ import { ensureDatabaseInitialized } from '@/lib/db-init';
 const defaultFromAddress = '纸片人男友 <noreply@ai.prx2025.xyz>';
 const defaultAppBaseUrl = 'https://ai.prx2025.xyz';
 const defaultFromName = '纸片人男友';
+const LOVE_LETTER_GENERATION_TIMEOUT_MS = 10_000;
+const EMAIL_SEND_TIMEOUT_MS = 20_000;
 
 declare global {
   var __dreamboyEmailTestRecipientWarned: boolean | undefined;
@@ -69,10 +71,27 @@ function getResendClient() {
   return new Resend(apiKey);
 }
 
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string) {
+  return Promise.race<T>([
+    promise,
+    new Promise<T>((_, reject) => {
+      const timeoutId = setTimeout(() => {
+        reject(new Error(message));
+      }, timeoutMs);
+
+      timeoutId.unref?.();
+    }),
+  ]);
+}
+
 async function sendEmailOrThrow(
   payload: Parameters<ReturnType<typeof getResendClient>['emails']['send']>[0],
 ) {
-  const result = await getResendClient().emails.send(payload);
+  const result = await withTimeout(
+    getResendClient().emails.send(payload),
+    EMAIL_SEND_TIMEOUT_MS,
+    `Resend send timed out after ${EMAIL_SEND_TIMEOUT_MS}ms`,
+  );
 
   if (result.error || !result.data?.id) {
     throw new Error(
@@ -119,6 +138,7 @@ async function generateLoveLetter(userName: string) {
         temperature: 0.9,
         stream: false,
       }),
+      signal: AbortSignal.timeout(LOVE_LETTER_GENERATION_TIMEOUT_MS),
     });
 
     if (!response.ok) {
@@ -137,10 +157,14 @@ async function generateLoveLetter(userName: string) {
     }),
   );
 
-  const response = await llmClient.invoke([{ role: 'user', content: prompt }], {
-    model,
-    temperature: 0.9,
-  });
+  const response = await withTimeout(
+    llmClient.invoke([{ role: 'user', content: prompt }], {
+      model,
+      temperature: 0.9,
+    }),
+    LOVE_LETTER_GENERATION_TIMEOUT_MS,
+    `Love letter generation timed out after ${LOVE_LETTER_GENERATION_TIMEOUT_MS}ms`,
+  );
 
   return response.content?.trim() || '';
 }

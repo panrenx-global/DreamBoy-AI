@@ -1,11 +1,85 @@
 import { sendDailyLoveLetterToAll } from '@/lib/email';
 import { NextRequest, NextResponse } from 'next/server';
 
+declare global {
+  var __dreamboyDailyEmailCronRun:
+    | {
+        runId: string;
+        startedAt: string;
+        force: boolean;
+        targetEmail: string | null;
+        promise: Promise<void>;
+      }
+    | undefined;
+}
+
+function isTruthyParam(value: string | null) {
+  return value === 'true' || value === '1' || value === 'yes';
+}
+
+function startDailyEmailCronRun(options: { force: boolean; targetEmail?: string }) {
+  const activeRun = globalThis.__dreamboyDailyEmailCronRun;
+
+  if (activeRun) {
+    return {
+      started: false as const,
+      activeRun: {
+        startedAt: activeRun.startedAt,
+        force: activeRun.force,
+        targetEmail: activeRun.targetEmail,
+      },
+    };
+  }
+
+  const startedAt = new Date().toISOString();
+  const runId = crypto.randomUUID();
+  const runPromise = (async () => {
+    try {
+      const summary = await sendDailyLoveLetterToAll(options);
+      const logPayload = {
+        trigger: 'api-background',
+        ...summary,
+      };
+
+      if (summary.failed > 0) {
+        console.error('[cron/daily-email] background run finished with failures', logPayload);
+        return;
+      }
+
+      if (summary.sent === 0) {
+        console.warn('[cron/daily-email] background run finished without sending any emails', logPayload);
+        return;
+      }
+
+      console.log('[cron/daily-email] background run finished', logPayload);
+    } catch (error) {
+      console.error('[cron/daily-email] background run failed', error);
+    } finally {
+      if (globalThis.__dreamboyDailyEmailCronRun?.runId === runId) {
+        globalThis.__dreamboyDailyEmailCronRun = undefined;
+      }
+    }
+  })();
+
+  globalThis.__dreamboyDailyEmailCronRun = {
+    runId,
+    startedAt,
+    force: options.force,
+    targetEmail: options.targetEmail?.trim().toLowerCase() || null,
+    promise: runPromise,
+  };
+
+  return {
+    started: true as const,
+    startedAt,
+  };
+}
+
 export async function GET(request: NextRequest) {
   const cronSecret = process.env.CRON_SECRET?.trim();
   const forceParam = request.nextUrl.searchParams.get('force');
-  const force =
-    forceParam === 'true' || forceParam === '1' || forceParam === 'yes';
+  const force = isTruthyParam(forceParam);
+  const wait = isTruthyParam(request.nextUrl.searchParams.get('wait'));
   const targetEmail = request.nextUrl.searchParams.get('email')?.trim().toLowerCase() || undefined;
 
   if (!cronSecret) {
@@ -48,9 +122,40 @@ export async function GET(request: NextRequest) {
     console.log('[cron/daily-email] request accepted', {
       authSource,
       force,
+      wait,
       targetEmail: targetEmail || null,
       userAgent: request.headers.get('user-agent') || 'unknown',
     });
+
+    if (!wait) {
+      const run = startDailyEmailCronRun({
+        force,
+        targetEmail,
+      });
+
+      if (!run.started) {
+        return NextResponse.json({
+          success: true,
+          queued: false,
+          message: '已有每日情话发送任务正在执行',
+          authSource,
+          time: new Date().toISOString(),
+          activeRun: run.activeRun,
+        });
+      }
+
+      return NextResponse.json(
+        {
+          success: true,
+          queued: true,
+          message: '每日情话发送任务已启动，正在后台处理',
+          authSource,
+          time: new Date().toISOString(),
+          startedAt: run.startedAt,
+        },
+        { status: 202 },
+      );
+    }
 
     const summary = await sendDailyLoveLetterToAll({
       force,

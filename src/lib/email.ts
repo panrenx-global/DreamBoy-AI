@@ -8,7 +8,7 @@ import { ensureDatabaseInitialized } from '@/lib/db-init';
 const defaultFromAddress = '纸片人男友 <noreply@ai.prx2025.xyz>';
 const defaultAppBaseUrl = 'https://ai.prx2025.xyz';
 const defaultFromName = '纸片人男友';
-const LOVE_LETTER_GENERATION_TIMEOUT_MS = 10_000;
+const LOVE_LETTER_GENERATION_TIMEOUT_MS = 20_000;
 const EMAIL_SEND_TIMEOUT_MS = 20_000;
 
 declare global {

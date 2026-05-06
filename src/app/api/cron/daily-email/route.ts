@@ -1,5 +1,5 @@
 import { sendDailyLoveLetterToAll } from '@/lib/email';
-import { NextRequest, NextResponse } from 'next/server';
+import { after, NextRequest, NextResponse } from 'next/server';
 
 declare global {
   var __dreamboyDailyEmailCronRun:
@@ -8,7 +8,6 @@ declare global {
         startedAt: string;
         force: boolean;
         targetEmail: string | null;
-        promise: Promise<void>;
       }
     | undefined;
 }
@@ -33,45 +32,17 @@ function startDailyEmailCronRun(options: { force: boolean; targetEmail?: string 
 
   const startedAt = new Date().toISOString();
   const runId = crypto.randomUUID();
-  const runPromise = (async () => {
-    try {
-      const summary = await sendDailyLoveLetterToAll(options);
-      const logPayload = {
-        trigger: 'api-background',
-        ...summary,
-      };
-
-      if (summary.failed > 0) {
-        console.error('[cron/daily-email] background run finished with failures', logPayload);
-        return;
-      }
-
-      if (summary.sent === 0) {
-        console.warn('[cron/daily-email] background run finished without sending any emails', logPayload);
-        return;
-      }
-
-      console.log('[cron/daily-email] background run finished', logPayload);
-    } catch (error) {
-      console.error('[cron/daily-email] background run failed', error);
-    } finally {
-      if (globalThis.__dreamboyDailyEmailCronRun?.runId === runId) {
-        globalThis.__dreamboyDailyEmailCronRun = undefined;
-      }
-    }
-  })();
-
   globalThis.__dreamboyDailyEmailCronRun = {
     runId,
     startedAt,
     force: options.force,
     targetEmail: options.targetEmail?.trim().toLowerCase() || null,
-    promise: runPromise,
   };
 
   return {
     started: true as const,
     startedAt,
+    runId,
   };
 }
 
@@ -143,6 +114,37 @@ export async function GET(request: NextRequest) {
           activeRun: run.activeRun,
         });
       }
+
+      after(async () => {
+        try {
+          const summary = await sendDailyLoveLetterToAll({
+            force,
+            targetEmail,
+          });
+          const logPayload = {
+            trigger: 'api-background',
+            ...summary,
+          };
+
+          if (summary.failed > 0) {
+            console.error('[cron/daily-email] background run finished with failures', logPayload);
+            return;
+          }
+
+          if (summary.sent === 0) {
+            console.warn('[cron/daily-email] background run finished without sending any emails', logPayload);
+            return;
+          }
+
+          console.log('[cron/daily-email] background run finished', logPayload);
+        } catch (error) {
+          console.error('[cron/daily-email] background run failed', error);
+        } finally {
+          if (globalThis.__dreamboyDailyEmailCronRun?.runId === run.runId) {
+            globalThis.__dreamboyDailyEmailCronRun = undefined;
+          }
+        }
+      });
 
       return NextResponse.json(
         {

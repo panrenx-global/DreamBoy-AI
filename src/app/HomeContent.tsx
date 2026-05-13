@@ -6,7 +6,7 @@ import { useChat } from '@/context/ChatContext';
 import { useAuth } from '@/context/AuthContext';
 import { CharacterSelect } from '@/components/CharacterSelect';
 import { ChatScreen } from '@/components/ChatScreen';
-import { TeamSectionBlock } from '@/components/TeamSectionBlock';
+import { Footer } from '@/components/Footer';
 
 export function HomeContent() {
   const { chatState, resetChat } = useChat();
@@ -39,7 +39,7 @@ export function HomeContent() {
   return (
     <>
       <CharacterSelect />
-      <TeamSectionBlock />
+      <Footer />
       <AuthDialog />
     </>
   );

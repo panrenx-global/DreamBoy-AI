@@ -118,6 +118,15 @@ export async function createSession(userId: number) {
     [randomUUID(), userId, tokenHash, expiresAt],
   );
 
+  await query(
+    `
+      update users
+      set last_login_at = now(), updated_at = now()
+      where id = $1
+    `,
+    [userId],
+  );
+
   return { token, expiresAt };
 }
 

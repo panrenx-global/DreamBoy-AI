@@ -19,10 +19,14 @@ create unique index if not exists users_username_key on users (username);
 alter table users add column if not exists email varchar(255);
 alter table users add column if not exists status varchar(20) not null default 'active';
 alter table users add column if not exists updated_at timestamptz not null default now();
+alter table users add column if not exists last_login_at timestamptz;
 
 create unique index if not exists users_email_key
 on users (lower(email))
 where email is not null;
+
+create index if not exists users_status_last_login_idx
+on users (status, last_login_at desc);
 
 create table if not exists user_sessions (
   id uuid primary key,
@@ -179,6 +183,13 @@ set
     else msg_type
   end
 where audio_url like 'data:audio/%';
+
+update users
+set last_login_at = coalesce(last_login_at, created_at, now())
+where last_login_at is null;
+
+alter table users alter column last_login_at set default now();
+alter table users alter column last_login_at set not null;
 `;
 
 async function seedCharacters() {

@@ -1,6 +1,7 @@
 import { Config, LLMClient } from 'coze-coding-dev-sdk';
 import { Resend } from 'resend';
 import { DailyLoveLetterEmail } from '@/emails/daily-love-letter';
+import { RecallInactiveUserEmail } from '@/emails/recall-inactive-user';
 import { WelcomeEmail } from '@/emails/welcome';
 import { query } from '@/lib/db';
 import { ensureDatabaseInitialized } from '@/lib/db-init';
@@ -214,7 +215,26 @@ export async function sendDailyLoveLetter(userEmail: string, userName: string) {
   });
 }
 
-type DailyLoveLetterUserRow = {
+export async function sendInactiveUserRecallEmail(userEmail: string, userName: string) {
+  const subjectTag = getRandomSubjectTag();
+  const emailId = await sendEmailOrThrow({
+    from: getMailFromAddress(),
+    to: getEmailRecipient(userEmail),
+    subject: `你去哪了 [${subjectTag}]，我想你了`,
+    react: RecallInactiveUserEmail({
+      userName,
+      appUrl: getAppBaseUrl(),
+    }),
+  });
+  console.log(`[email] inactive_user_recall sent`, {
+    userEmail,
+    recipient: getEmailRecipient(userEmail),
+    userName,
+    emailId,
+  });
+}
+
+type ActiveEmailUserRow = {
   id: number;
   email: string | null;
   username: string;
@@ -232,7 +252,7 @@ function getDateStringInTimeZone(date: Date, timeZone: string) {
   return formatter.format(date);
 }
 
-async function claimScheduledEmailDelivery(userId: number, deliveryDate: string) {
+async function claimScheduledEmailDelivery(userId: number, emailType: string, deliveryDate: string) {
   const result = await query<{ id: number }>(
     `
       insert into scheduled_email_deliveries (
@@ -244,7 +264,7 @@ async function claimScheduledEmailDelivery(userId: number, deliveryDate: string)
         sent_at,
         updated_at
       )
-      values ($1, 'daily_love_letter', $2::date, 'processing', null, null, now())
+      values ($1, $2, $3::date, 'processing', null, null, now())
       on conflict (user_id, email_type, delivery_date)
       do update set
         status = 'processing',
@@ -258,7 +278,7 @@ async function claimScheduledEmailDelivery(userId: number, deliveryDate: string)
         )
       returning id
     `,
-    [userId, deliveryDate],
+    [userId, emailType, deliveryDate],
   );
 
   return result.rows[0]?.id ?? null;
@@ -300,7 +320,7 @@ export async function sendDailyLoveLetterToAll(options?: {
   const force = options?.force === true;
   const targetEmail = options?.targetEmail?.trim().toLowerCase() || null;
 
-  const result = await query<DailyLoveLetterUserRow>(
+  const result = await query<ActiveEmailUserRow>(
     `
       select id, email, username, nickname
       from users
@@ -324,7 +344,9 @@ export async function sendDailyLoveLetterToAll(options?: {
       continue;
     }
 
-    const deliveryId = force ? null : await claimScheduledEmailDelivery(user.id, deliveryDate);
+    const deliveryId = force
+      ? null
+      : await claimScheduledEmailDelivery(user.id, 'daily_love_letter', deliveryDate);
 
     if (!force && !deliveryId) {
       duplicates += 1;
@@ -351,6 +373,99 @@ export async function sendDailyLoveLetterToAll(options?: {
     force,
     targetEmail,
     timeZone,
+    total: result.rows.length,
+    sent,
+    failed,
+    skipped,
+    duplicates,
+  };
+}
+
+export async function sendInactiveUserRecallToAll(options?: {
+  deliveryDate?: string;
+  timeZone?: string;
+  force?: boolean;
+  targetEmail?: string;
+  inactiveDays?: number;
+}) {
+  await ensureDatabaseInitialized();
+  const timeZone = options?.timeZone || process.env.RECALL_INACTIVE_USERS_TIMEZONE || 'Asia/Shanghai';
+  const deliveryDate = options?.deliveryDate || getDateStringInTimeZone(new Date(), timeZone);
+  const force = options?.force === true;
+  const targetEmail = options?.targetEmail?.trim().toLowerCase() || null;
+  const inactiveDaysValue = options?.inactiveDays ?? Number(process.env.RECALL_INACTIVE_DAYS || 3);
+  const inactiveDays = Number.isFinite(inactiveDaysValue)
+    ? Math.max(1, Math.floor(inactiveDaysValue))
+    : 3;
+
+  const result = await query<ActiveEmailUserRow>(
+    `
+      select u.id, u.email, u.username, u.nickname
+      from users u
+      where u.status = 'active'
+        and u.email is not null
+        and u.last_login_at <= now() - ($2::int * interval '1 day')
+        and ($1::text is null or lower(u.email) = $1)
+        and (
+          $3::boolean
+          or not exists (
+            select 1
+            from scheduled_email_deliveries sed
+            where sed.user_id = u.id
+              and sed.email_type = 'inactive_user_recall'
+              and sed.status = 'sent'
+              and sed.sent_at is not null
+              and sed.sent_at >= u.last_login_at
+          )
+        )
+    `,
+    [targetEmail, inactiveDays, force],
+  );
+
+  let sent = 0;
+  let failed = 0;
+  let skipped = 0;
+  let duplicates = 0;
+
+  for (const user of result.rows) {
+    const userEmail = user.email?.trim();
+    const userName = user.nickname?.trim() || user.username;
+
+    if (!userEmail) {
+      skipped += 1;
+      continue;
+    }
+
+    const deliveryId = force
+      ? null
+      : await claimScheduledEmailDelivery(user.id, 'inactive_user_recall', deliveryDate);
+
+    if (!force && !deliveryId) {
+      duplicates += 1;
+      continue;
+    }
+
+    try {
+      await sendInactiveUserRecallEmail(userEmail, userName);
+      if (deliveryId) {
+        await markScheduledEmailDeliverySent(deliveryId);
+      }
+      sent += 1;
+    } catch (error) {
+      if (deliveryId) {
+        await markScheduledEmailDeliveryFailed(deliveryId, error);
+      }
+      failed += 1;
+      console.error(`给 ${userEmail} 发召回邮件失败：`, error);
+    }
+  }
+
+  return {
+    deliveryDate,
+    force,
+    targetEmail,
+    timeZone,
+    inactiveDays,
     total: result.rows.length,
     sent,
     failed,

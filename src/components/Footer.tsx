@@ -1,7 +1,7 @@
 export function Footer() {
   return (
     <footer className="bg-slate-950 px-4 py-8 text-center text-sm text-slate-400">
-      <p>
+      <p className="mb-3">
         有问题或建议？联系我们：
         <a
           href="mailto:feedback@ai.prx2025.xyz"
@@ -18,6 +18,14 @@ export function Footer() {
         </a>
         ）
       </p>
+      <a
+        href="https://discord.gg/Z245qNya4"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="text-rose-300 transition-colors hover:text-rose-200"
+      >
+        Join our Discord Community
+      </a>
     </footer>
   );
 }

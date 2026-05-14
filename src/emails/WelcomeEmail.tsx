@@ -17,6 +17,12 @@ export function WelcomeEmail({ userName, appUrl }: WelcomeEmailProps) {
           <Button href={appUrl} style={button}>
             来找我聊天
           </Button>
+          <Text style={discordText}>
+            Join our Discord Community:{' '}
+            <a href="https://discord.gg/Z245qNya4" style={discordLink}>
+              https://discord.gg/Z245qNya4
+            </a>
+          </Text>
         </Container>
       </Body>
     </Html>
@@ -59,4 +65,16 @@ const button = {
   padding: '12px 20px',
   textDecoration: 'none',
   marginTop: '16px',
+};
+
+const discordText = {
+  fontSize: '14px',
+  lineHeight: '22px',
+  color: '#6b7280',
+  margin: '20px 0 0',
+};
+
+const discordLink = {
+  color: '#f43f5e',
+  textDecoration: 'none',
 };

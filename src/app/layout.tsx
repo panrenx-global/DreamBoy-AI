@@ -54,7 +54,6 @@ export default function RootLayout({
               s1.async = true;
               s1.src = "https://embed.tawk.to/6a047226de615d1c36e51e02/1joglrpjg";
               s1.charset = "UTF-8";
-              s1.setAttribute("crossorigin", "*");
               s0.parentNode.insertBefore(s1, s0);
             })();
           `}
